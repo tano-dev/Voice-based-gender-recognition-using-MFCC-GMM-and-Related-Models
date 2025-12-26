@@ -8,10 +8,11 @@ from hmmlearn import hmm
 warnings.filterwarnings("ignore")
 
 import pydub
-import subprocess
+import librosa
+import soundfile as sf
+import numpy as np
 import speech_recognition as sr
 from pydub import AudioSegment
-from subprocess import Popen, PIPE
 from pydub.silence import split_on_silence, detect_nonsilent
 
 
@@ -31,38 +32,36 @@ class GenderIdentifier:
         
     def ffmpeg_silence_eliminator(self, input_path, output_path):
         """
-        Eliminate silence from voice file using ffmpeg library.
-        Args:
-            input_path  (str) : Path to get the original voice file from.
-            output_path (str) : Path to save the processed file to.
-        Returns:
-            (list)  : List including True for successful authentication, False otherwise and a percentage value
-                      representing the certainty of the decision.
+        Eliminate silence using librosa (No FFmpeg required).
         """
-        # filter silence in mp3 file
-        filter_command = ["ffmpeg", "-i", input_path, "-af", "silenceremove=1:0:0.05:-1:1:-36dB", "-ac", "1", "-ss", "0","-t","90", output_path, "-y"]
-        out = subprocess.Popen(filter_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        out.wait()
-        
-        with_silence_duration = os.popen("ffprobe -i '" + input_path + "' -show_format -v quiet | sed -n 's/duration=//p'").read()
-        no_silence_duration   = os.popen("ffprobe -i '" + output_path + "' -show_format -v quiet | sed -n 's/duration=//p'").read()
-        
-        # print duration specs
         try:
-            print("%-32s %-7s %-50s" % ("ORIGINAL SAMPLE DURATION",         ":", float(with_silence_duration)))
-            print("%-23s %-7s %-50s" % ("SILENCE FILTERED SAMPLE DURATION", ":", float(no_silence_duration)))
-        except:
-            print("WaveHandlerError: Cannot convert float to string", with_silence_duration, no_silence_duration)
-    
-        # convert file to wave and read array
-        load_command = ["ffmpeg", "-i", output_path, "-f", "wav", "-" ]
-        p            = Popen(load_command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-        data         = p.communicate()[0]
-        audio_np     = np.frombuffer(data[data.find(b'\x00data')+ 9:], np.int16)
-        
-        # delete temp silence free file, as we only need the array
-        #os.remove(output_path)
-        return audio_np, no_silence_duration
+            # 1. Load the audio file
+            # sr=None preserves original sampling rate
+            y, sr = librosa.load(input_path, sr=None)
+            
+            # Calculate original duration for logging
+            orig_duration = librosa.get_duration(y=y, sr=sr)
+
+            # 2. Trim silence (top_db=36 matches your old ffmpeg -36dB setting)
+            y_trimmed, _ = librosa.effects.trim(y, top_db=36)
+            
+            # Calculate new duration
+            new_duration = librosa.get_duration(y=y_trimmed, sr=sr)
+
+            # 3. Print info (Replacing your os.popen/sed logic)
+            print("%-32s %-7s %-50s" % ("ORIGINAL SAMPLE DURATION", ":", float(orig_duration)))
+            print("%-23s %-7s %-50s" % ("SILENCE FILTERED SAMPLE DURATION", ":", float(new_duration)))
+
+            # 4. Save the processed file to disk
+            # We save as PCM_16 to ensure compatibility with standard WAV readers
+            sf.write(output_path, y_trimmed, sr, subtype='PCM_16')
+            
+            # Return values (Your process() method ignores these, but we return them to match the old signature)
+            return y_trimmed, new_duration
+
+        except Exception as e:
+            print(f"Error processing {input_path}: {e}")
+            return None, 0
     
         
         
@@ -79,7 +78,15 @@ class GenderIdentifier:
             try: 
                 vector = self.features_extractor.extract_features(file.split('.')[0] + "_without_silence.wav")
                 winner = self.identify_gender(vector)
-                expected_gender = file.split("/")[1][:-1]
+                # OLD (Broken on Windows):
+                # expected_gender = file.split("/")[1][:-1]
+
+                # NEW (Robust):
+                # 1. Get the folder name (e.g., "females" or "males")
+                folder_name = os.path.basename(os.path.dirname(file))
+
+                # 2. Remove the last 's' to turn "females" into "female"
+                expected_gender = folder_name[:-1]
 
                 print("%10s %6s %1s" % ("+ EXPECTATION",":", expected_gender))
                 print("%10s %3s %1s" %  ("+ IDENTIFICATION", ":", winner))
@@ -106,10 +113,10 @@ class GenderIdentifier:
 
     def identify_gender(self, vector):
         ubm_score = self.ubm.score(vector)
-        # female hypothesis scoring
-        is_female_log_likelihood = self.females_gmm.score(vector) / ubm_score
-        # male hypothesis scoring
-        is_male_log_likelihood = self.males_gmm.score(vector) / ubm_score
+        
+        # USE SUBTRACTION (Standard Log-Likelihood Ratio)
+        is_female_log_likelihood = self.females_gmm.score(vector) - ubm_score
+        is_male_log_likelihood   = self.males_gmm.score(vector)   - ubm_score
 
         print("%10s %5s %1s" % ("+ FEMALE SCORE",":", str(round(is_female_log_likelihood, 3))))
         print("%10s %7s %1s" % ("+ MALE SCORE", ":", str(round(is_male_log_likelihood,3))))

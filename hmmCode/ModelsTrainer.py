@@ -7,10 +7,11 @@ from hmmlearn import hmm
 
 
 import pydub
-import subprocess
+import librosa
+import soundfile as sf
+import numpy as np
 import speech_recognition as sr
 from pydub import AudioSegment
-from subprocess import Popen, PIPE
 from pydub.silence import split_on_silence, detect_nonsilent
 
 warnings.filterwarnings("ignore")
@@ -31,38 +32,31 @@ class ModelsTrainer:
 
     def ffmpeg_silence_eliminator(self, input_path, output_path):
         """
-        Eliminate silence from voice file using ffmpeg library.
-        Args:
-            input_path  (str) : Path to get the original voice file from.
-            output_path (str) : Path to save the processed file to.
-        Returns:
-            (list)  : List including True for successful authentication, False otherwise and a percentage value
-                      representing the certainty of the decision.
+        Eliminate silence using librosa (Pure Python, no ffmpeg required).
         """
-        # filter silence in mp3 file
-        filter_command = ["ffmpeg", "-i", input_path, "-af", "silenceremove=1:0:0.05:-1:1:-36dB", "-ac", "1", "-ss", "0","-t","90", output_path, "-y"]
-        out = subprocess.Popen(filter_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        out.wait()
-        
-        with_silence_duration = os.popen("ffprobe -i '" + input_path + "' -show_format -v quiet | sed -n 's/duration=//p'").read()
-        no_silence_duration   = os.popen("ffprobe -i '" + output_path + "' -show_format -v quiet | sed -n 's/duration=//p'").read()
-        
-        # print duration specs
         try:
-            print("%-32s %-7s %-50s" % ("ORIGINAL SAMPLE DURATION",         ":", float(with_silence_duration)))
-            print("%-23s %-7s %-50s" % ("SILENCE FILTERED SAMPLE DURATION", ":", float(no_silence_duration)))
-        except:
-            print("WaveHandlerError: Cannot convert float to string", with_silence_duration, no_silence_duration)
-    
-        # convert file to wave and read array
-        load_command = ["ffmpeg", "-i", output_path, "-f", "wav", "-" ]
-        p            = Popen(load_command, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-        data         = p.communicate()[0]
-        audio_np     = np.frombuffer(data[data.find(b'\x00data')+ 9:], np.int16)
-        
-        # delete temp silence free file, as we only need the array
-        #os.remove(output_path)
-        return audio_np, no_silence_duration
+            # 1. Load the audio file
+            # sr=None preserves the original sampling rate
+            y, sr = librosa.load(input_path, sr=None)
+
+            # 2. Trim silence
+            # top_db=36 matches your previous ffmpeg -36dB threshold
+            y_trimmed, index = librosa.effects.trim(y, top_db=36)
+
+            # 3. Save the processed file to disk
+            # We save as PCM_16 to ensure compatibility with your FeaturesExtractor
+            sf.write(output_path, y_trimmed, sr, subtype='PCM_16')
+            
+            # Optional: Print info to match your old logs
+            duration = librosa.get_duration(y=y_trimmed, sr=sr)
+            print(f"Processed: {duration:.2f}s kept")
+            
+            # Return data (though your main loop ignores this return value)
+            return y_trimmed, duration
+
+        except Exception as e:
+            print(f"Error processing {input_path}: {e}")
+            return None, 0
     
 
 
@@ -86,7 +80,7 @@ class ModelsTrainer:
         # save models
         self.save_gmm(females_gmm, "females")
         self.save_gmm(males_gmm,   "males")
-        self.save_gmm(males_gmm,   "ubm")
+        self.save_gmm(ubm, "ubm")          # <--- Pass the 'ubm' variable
 
 
     def get_file_paths(self, females_training_path, males_training_path):

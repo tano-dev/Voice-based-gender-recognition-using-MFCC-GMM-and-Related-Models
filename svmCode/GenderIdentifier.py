@@ -93,6 +93,7 @@ class GenderIdentifier:
             accuracy     = ( float(self.total_sample - self.error) / float(self.total_sample) ) * 100
             accuracy_msg = "*** Accuracy = " + str(round(accuracy, 3)) + "% ***"
             print(accuracy_msg)
+            self.process_plot()
         else:
             print("No samples processed.")
 
@@ -102,7 +103,21 @@ class GenderIdentifier:
         males   = [ os.path.join(males_training_path, f) for f in os.listdir(males_training_path) ]
         files   = females + males
         return files
-
+    def process_plot(self):
+        import matplotlib.pyplot as plt
+        
+        # Plot training data 
+        if self.total_sample > 0:
+            accuracy     = ( float(self.total_sample - self.error) / float(self.total_sample) ) * 100
+            accuracy_msg = "*** Accuracy = " + str(round(accuracy, 3)) + "% ***"
+            print(accuracy_msg)
+            plt.figure(figsize=(6,4))
+            plt.bar(['Correct', 'Incorrect'], [self.total_sample - self.error, self.error], color=['green', 'red'])
+            plt.title('Gender Identification Accuracy: ' + str(round(accuracy, 2)) + '%')
+            plt.xlabel('Outcome')
+            plt.ylabel('Number of Samples')
+            plt.show()
+            
 if __name__== "__main__":
     # Ensure these paths point to your actual .svm (pickle) files
     gender_identifier = GenderIdentifier("TestingData/females", "TestingData/males", "svmCode/females.svm", "svmCode/males.svm")

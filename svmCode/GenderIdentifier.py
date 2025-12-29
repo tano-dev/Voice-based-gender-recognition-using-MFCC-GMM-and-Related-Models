@@ -18,6 +18,7 @@ class GenderIdentifier:
         self.error                 = 0
         self.total_sample          = 0
         self.features_extractor    = FeaturesExtractor()
+        
         # Metrics tracking
         self.true_positive_female = 0
         self.true_positive_male = 0
@@ -34,7 +35,8 @@ class GenderIdentifier:
         
         # Component tracking (from GMM means)
         self.component_counts = []  # Number of components per sample
-
+        
+        
         # NaN statistics
         self.nan_removal_stats = {
             'original_count': 0,
@@ -42,75 +44,81 @@ class GenderIdentifier:
             'kept_count': 0
         }
         
-        # Load features (Note: these are numpy arrays of stacked means, not actual GMM objects)
+        # Load features
+        print("Loading training features...")
         self.females_gmm = pickle.load(open(females_model_path, 'rb'))
         self.males_gmm   = pickle.load(open(males_model_path, 'rb'))
         
         # Stack features for SVM training
         self.X_train = np.vstack((self.females_gmm, self.males_gmm))
-        self.y_train = np.hstack(( -1 * np.ones(self.females_gmm.shape[0]), np.ones(self.males_gmm.shape[0])))
+        self.y_train = np.hstack((-1 * np.ones(self.females_gmm.shape[0]), 
+                                  np.ones(self.males_gmm.shape[0])))
         
-        # --- FIX 1: REMOVE NaNs BEFORE TRAINING ---
-        # Create a mask to identify rows that do NOT have NaN values
         # Track NaN removal
         self.nan_removal_stats['original_count'] = len(self.X_train)
         mask = ~np.isnan(self.X_train).any(axis=1)
         self.nan_removal_stats['removed_count'] = len(mask) - mask.sum()
-
-        # Keep only the valid rows
+        
+        # Keep only valid rows
         self.X_train = self.X_train[mask]
         self.y_train = self.y_train[mask]
         self.nan_removal_stats['kept_count'] = len(self.X_train)
-       
+        
         print(f"Training data: {self.X_train.shape}")
         print(f"  - Original samples: {self.nan_removal_stats['original_count']}")
         print(f"  - Removed (NaN): {self.nan_removal_stats['removed_count']}")
         print(f"  - Clean samples: {self.nan_removal_stats['kept_count']}")
-        # ------------------------------------------
-
-        print(f"Training SVM with {len(self.X_train)} clean samples (removed {self.nan_removal_stats['removed_count']} NaN rows)...")
-        self.clf = SVC(kernel = 'rbf', probability=True)
+        
+        # Train SVM
+        print("\nTraining SVM classifier...")
+        self.clf = SVC(kernel='rbf', probability=True, gamma='scale', C=1.0)
         self.clf.fit(self.X_train, self.y_train)
         
         # Evaluate on training data
         train_score = self.clf.score(self.X_train, self.y_train)
         print(f"SVM Training Accuracy: {train_score*100:.2f}%")
         print(f"Support Vectors: {self.clf.n_support_}")
+        
 
-    def process(self):
+    def process(self):        
         files = self.get_file_paths(self.females_training_path, self.males_training_path)
+        
+        print(f"\n{'='*70}")
+        print(f"Processing {len(files)} audio files...")
+        print(f"{'='*70}\n")
         
         for file in files:
             self.total_sample += 1
             filename = os.path.basename(file)
-            print("%10s %8s %1s" % ("--> TESTING", ":", os.path.basename(file)))
+            print("%10s %8s %1s" % ("--> TESTING", ":", filename))
 
             try: 
-                # extract MFCC & delta MFCC features from audio
+                # Extract features
                 vector = self.features_extractor.extract_features(file)
                 
+                # Fit GMM to get supervector
                 spk_gmm = hmm.GaussianHMM(n_components=2)      
                 spk_gmm.fit(vector)
                 spk_vec = spk_gmm.means_
                 
                 # Track component count
                 self.component_counts.append(len(spk_vec))
-
-                # Predict gender
-                prediction_result = self.clf.predict(self.spk_vec)
+                
+                # Get SVM predictions
+                prediction_result = self.clf.predict(spk_vec)
                 probabilities = self.clf.predict_proba(spk_vec)
                 decision_scores = self.clf.decision_function(spk_vec)
-
-                # Check prediction (Summing results in case of multiple vectors, though usually it's 1 row)
-                if np.sum(prediction_result) > 0: 
+                
+                # Aggregate predictions (sum of results)
+                prediction_sum = np.sum(prediction_result)
+                if prediction_sum > 0: 
                     sc = 1
+                    winner = "male"
                 else: 
                     sc = -1
-                    
-                genders = {-1: "female", 1: "male"}
-                winner = genders[sc]
+                    winner = "female"
                 
-                # --- FIX 2: ROBUST PATH CHECKING (Fixes Windows/Linux split issue) ---
+                # Determine expected gender
                 if "female" in file.lower():
                     expected_gender = "female"
                     true_label = -1
@@ -120,7 +128,7 @@ class GenderIdentifier:
                 else:
                     expected_gender = "unknown"
                     true_label = 0
-                # ------------------------------------------
+                
                 # Store for metrics (only if valid label)
                 if true_label != 0:
                     self.true_labels.append(true_label)
@@ -136,35 +144,26 @@ class GenderIdentifier:
                 
                 # Update metrics
                 self.update_metrics(expected_gender, winner)
-                # ---------------------------------------------------------------------
                 
                 print("%10s %6s %1s" % ("+ EXPECTATION",":", expected_gender))
-                print("%10s %3s %1s" %  ("+ IDENTIFICATION", ":", winner))
+                print("%10s %3s %1s" % ("+ IDENTIFICATION", ":", winner))
                 print(f"   Components: {len(spk_vec)}")
                 print(f"   Decision score: {np.mean(decision_scores):.3f}")
                 print(f"   Probability: Female={np.mean(probabilities[:, 0]):.3f}, Male={np.mean(probabilities[:, 1]):.3f}")
 
                 if winner != expected_gender: 
                     self.error += 1
+                                
+
                 print("----------------------------------------------------")
 
             except Exception as e:
-                print(f"Error processing {os.path.basename(file)}: {e}")
+                print(f"    [ERROR] Failed to process: {e}")
                 self.total_sample -= 1
-
-        # Final accuracy
-        if self.total_sample > 0:
-            accuracy     = ( float(self.total_sample - self.error) / float(self.total_sample) ) * 100
-            accuracy_msg = "*** Accuracy = " + str(round(accuracy, 3)) + "% ***"
-            print(accuracy_msg)
-        else:
-            print("No samples processed.")
-        
-        
+            
         # Print comprehensive statistics
         self.print_statistics()
         self.process_plot()
-
 
     def update_metrics(self, expected, predicted):
         """Update confusion matrix metrics"""
@@ -180,10 +179,10 @@ class GenderIdentifier:
             self.false_positive_female += 1
 
     def get_file_paths(self, females_training_path, males_training_path):
-        females = [ os.path.join(females_training_path, f) for f in os.listdir(females_training_path) ]
-        males   = [ os.path.join(males_training_path, f) for f in os.listdir(males_training_path) ]
-        files   = females + males
-        return files
+        females = [os.path.join(females_training_path, f) for f in os.listdir(females_training_path) if f.endswith('.wav')]
+        males   = [os.path.join(males_training_path, f) for f in os.listdir(males_training_path) if f.endswith('.wav')]
+        return females + males
+
     def calculate_metrics(self):
         """Calculate precision, recall, F1-score for each gender"""
         metrics = {}
@@ -256,10 +255,10 @@ class GenderIdentifier:
         
         # Basic statistics
         accuracy = (self.total_sample - self.error) / self.total_sample * 100
-        print(f"\n OVERALL PERFORMANCE")
+        print(f"\n📊 OVERALL PERFORMANCE")
         print(f"   Accuracy: {round(accuracy, 2)}%")
-        print(f"   Correct: {self.total_sample - self.error}/{self.total_sample}")
-        print(f"   Incorrect: {self.error}/{self.total_sample}")
+        print(f"   ✓ Correct: {self.total_sample - self.error}/{self.total_sample}")
+        print(f"   ✗ Incorrect: {self.error}/{self.total_sample}")
         
         # Confusion Matrix
         print("\n" + "-"*70)
@@ -365,8 +364,8 @@ class GenderIdentifier:
             
             print(f"\n  Average components per sample: {np.mean(self.component_counts):.1f}")
             print(f"  Min/Max components: {np.min(self.component_counts)} / {np.max(self.component_counts)}")
-        
 
+        
         print("\n" + "="*70 + "\n")
 
     def process_plot(self):
@@ -378,7 +377,7 @@ class GenderIdentifier:
             
         metrics = self.calculate_metrics()
         
-        fig = plt.figure(figsize=(18, 12))
+        fig = plt.figure(figsize=(18, 16))
         
         # 1. Confusion Matrix
         ax1 = plt.subplot(3, 4, 1)
@@ -507,10 +506,10 @@ class GenderIdentifier:
                     str(count), ha='center', va='bottom', fontweight='bold')
         ax7.grid(True, alpha=0.3, axis='y')
         
- 
+
         
         # 8. Per-class Accuracy
-        ax8 = plt.subplot(3, 4, 8)
+        ax8 = plt.subplot(3, 4, 9)
         female_acc = self.true_positive_female / (self.true_positive_female + self.false_negative_female) if (self.true_positive_female + self.false_negative_female) > 0 else 0
         male_acc = self.true_positive_male / (self.true_positive_male + self.false_negative_male) if (self.true_positive_male + self.false_negative_male) > 0 else 0
         
@@ -526,7 +525,7 @@ class GenderIdentifier:
         ax8.grid(True, alpha=0.3, axis='y')
         
         # 9. Training Data Quality
-        ax9 = plt.subplot(3, 4, 9)
+        ax9 = plt.subplot(3, 4, 10)
         quality_labels = ['Clean', 'NaN Removed']
         quality_counts = [self.nan_removal_stats['kept_count'], 
                          self.nan_removal_stats['removed_count']]
@@ -540,9 +539,9 @@ class GenderIdentifier:
                          str(count), ha='center', va='bottom', fontweight='bold')
         ax9.grid(True, alpha=0.3, axis='y')
         
-        # 10. ROC Curve
+        # 10. ROC Curve (if we have probabilities)
         if self.probabilities and self.true_labels:
-            ax10 = plt.subplot(3, 4, 10)
+            ax10 = plt.subplot(3, 4, 11)
             probs_array = np.array(self.probabilities)
             true_labels_array = np.array(self.true_labels)
             
@@ -554,7 +553,7 @@ class GenderIdentifier:
             roc_auc = auc(fpr, tpr)
             
             ax10.plot(fpr, tpr, color='#2196f3', lw=2, label=f'ROC curve (AUC = {roc_auc:.3f})')
-            ax10.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--',label='Random')
+            ax10.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random')
             ax10.set_xlim([0.0, 1.0])
             ax10.set_ylim([0.0, 1.05])
             ax10.set_xlabel('False Positive Rate')
@@ -564,7 +563,7 @@ class GenderIdentifier:
             ax10.grid(True, alpha=0.3)
         
         # 11. Summary Statistics
-        ax11 = plt.subplot(3, 4, 11)
+        ax11 = plt.subplot(3, 4, 12)
         ax11.axis('off')
         
         avg_decision_score = np.mean(np.abs(self.decision_scores)) if self.decision_scores else 0
@@ -602,9 +601,11 @@ class GenderIdentifier:
         plt.show()
 
 
-
-
 if __name__== "__main__":
-    # Ensure these paths point to your actual .svm (pickle) files
-    gender_identifier = GenderIdentifier("TestingData/females", "TestingData/males", "svmCode/females.svm", "svmCode/males.svm")
+    gender_identifier = GenderIdentifier(
+        "TestingData/females", 
+        "TestingData/males", 
+        "svmCode/females.svm", 
+        "svmCode/males.svm"
+    )
     gender_identifier.process()

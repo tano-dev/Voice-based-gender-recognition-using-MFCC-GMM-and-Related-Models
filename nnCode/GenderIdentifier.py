@@ -377,7 +377,7 @@ class GenderIdentifier:
             
         metrics = self.calculate_metrics()
         
-        fig = plt.figure(figsize=(25, 20))
+        fig = plt.figure(figsize=(16, 16))
         
         # 1. Confusion Matrix
         ax1 = plt.subplot(3, 4, 1)

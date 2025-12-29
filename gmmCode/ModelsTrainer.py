@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 import matplotlib.pyplot as plt  # Import matplotlib
 from sklearn.mixture import GaussianMixture
-from Code.FeaturesExtractor import FeaturesExtractor
+from gmmCode.FeaturesExtractor import FeaturesExtractor
 
 warnings.filterwarnings("ignore")
 

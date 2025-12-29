@@ -2,7 +2,7 @@ import os
 import pickle
 import warnings
 import numpy as np
-from Code.FeaturesExtractor import FeaturesExtractor
+from gmmCode.FeaturesExtractor import FeaturesExtractor
 
 warnings.filterwarnings("ignore")
 

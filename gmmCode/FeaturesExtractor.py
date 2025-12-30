@@ -28,7 +28,7 @@ class FeaturesExtractor:
                             rate,
                             # The length of the analysis window in seconds. 
                             # Default is 0.025s (25 milliseconds)
-                            winlen       = 0.05,
+                            winlen       = 0.035,
                             # The step between successive windows in seconds. 
                             # Default is 0.01s (10 milliseconds)
                             winstep      = 0.01,
@@ -39,7 +39,7 @@ class FeaturesExtractor:
                             # Default is 26.
                             nfilt        = 30,
                             # The FFT size. Default is 512.
-                            nfft         = 512,
+                            nfft         = 1024,
                             # If true, the zeroth cepstral coefficient is replaced 
                             # with the log of the total frame energy.
                             appendEnergy = True)

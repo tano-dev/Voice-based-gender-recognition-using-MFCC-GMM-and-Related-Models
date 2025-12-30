@@ -15,7 +15,7 @@ The system extracts MFCC features from audio files and trains models to classify
 ## Features
 
 ### Feature Extraction
-The project uses MFCC with delta and double-delta coefficients for robust voice feature representation: [1](#0-0) 
+The project uses MFCC with delta and double-delta coefficients for robust voice feature representation:
 
 Configuration parameters include:
 - 5 MFCC coefficients
@@ -28,17 +28,17 @@ Configuration parameters include:
 
 Each implementation follows the same modular structure with four main components:
 
-1. **DataManager**: Handles dataset extraction and organization [2](#0-1) 
+1. **DataManager**: Handles dataset extraction and organization
 
 2. **FeaturesExtractor**: Extracts MFCC features from audio files
 
-3. **ModelsTrainer**: Trains gender-specific models with convergence visualization [3](#0-2) 
+3. **ModelsTrainer**: Trains gender-specific models with convergence visualization
 
-4. **GenderIdentifier**: Performs gender classification and evaluation [4](#0-3) 
+4. **GenderIdentifier**: Performs gender classification and evaluation
 
 ## Dataset
 
-The project uses the **SLR45 dataset** which contains voice recordings from multiple speakers: [5](#0-4) 
+The project uses the **SLR45 dataset** which contains voice recordings from multiple speakers:
 
 The dataset includes:
 - Multiple male and female speakers
@@ -119,7 +119,7 @@ python -m svmCode.ModelsTrainer
 python -m nnCode.ModelsTrainer
 ```
 
-Training will display convergence plots showing the log-likelihood improvement over iterations. [6](#0-5) 
+Training will display convergence plots showing the log-likelihood improvement over iterations.
 
 ### Testing Models
 
@@ -134,7 +134,7 @@ The system will process all test files and output:
 - Confusion matrix
 - Precision, recall, and F1-scores for each gender
 - Overall accuracy
-- Score distribution visualizations [7](#0-6) 
+- Score distribution visualizations 
 
 ### Using Jupyter Notebooks
 
@@ -147,7 +147,7 @@ Interactive notebooks are available for each implementation:
 ## Model Details
 
 ### GMM Implementation
-Uses 16-component Gaussian Mixture Models with diagonal covariance matrices: [8](#0-7) 
+Uses 16-component Gaussian Mixture Models with diagonal covariance matrices:
 
 ### Evaluation Metrics
 
@@ -155,7 +155,7 @@ The system provides comprehensive performance metrics:
 - **Confusion Matrix**: Shows true positives, false positives, true negatives, false negatives
 - **Per-Class Metrics**: Precision, recall, and F1-score for male and female classes
 - **Macro-Averaged Metrics**: Overall performance across both classes
-- **Score Statistics**: Distribution of model confidence scores [9](#0-8) 
+- **Score Statistics**: Distribution of model confidence scores
 
 ### Visualization
 
@@ -165,17 +165,17 @@ The system generates multiple visualizations:
 3. Accuracy comparison charts
 4. Score distribution scatter plots
 5. Per-class accuracy bars
-6. Summary statistics panel [10](#0-9) 
+6. Summary statistics panel
 
 ## How It Works
 
-1. **Data Preparation**: The DataManager extracts the SLR45 dataset and splits it into training/testing sets based on speaker IDs [11](#0-10) 
+1. **Data Preparation**: The DataManager extracts the SLR45 dataset and splits it into training/testing sets based on speaker IDs
 
 2. **Feature Extraction**: MFCC features are extracted from each audio file, including deltas and double-deltas
 
 3. **Model Training**: Separate models are trained for male and female voices using the training data
 
-4. **Gender Classification**: For a new voice sample, features are extracted and scored against both models. The higher score determines the predicted gender [12](#0-11) 
+4. **Gender Classification**: For a new voice sample, features are extracted and scored against both models. The higher score determines the predicted gender 
 
 ## Notes
 

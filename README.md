@@ -1,9 +1,3 @@
-# Voice-based-gender-recognition-using-MFCC-and-GMM
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tano-dev/Voice-based-gender-recognition-using-MFCC-and-GMM)
-Yes, I can create a comprehensive README.md for this project! Based on my exploration of the codebase, here's a README that documents all the key aspects:
-
----
-
 # Voice-Based Gender Recognition using MFCC and GMM
 
 A machine learning project that identifies gender from voice recordings using Mel-Frequency Cepstral Coefficients (MFCC) and multiple classification algorithms.

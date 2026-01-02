@@ -34,7 +34,7 @@ class FeaturesExtractor:
                             winstep      = 0.01,
                             # The number of cepstrum to return. 
                             # Default 13.
-                            numcep       = 5,
+                            numcep       = 13,
                             # The number of filters in the filterbank.
                             # Default is 26.
                             nfilt        = 30,

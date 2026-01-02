@@ -18,7 +18,7 @@ The system extracts MFCC features from audio files and trains models to classify
 The project uses MFCC with delta and double-delta coefficients for robust voice feature representation:
 
 Configuration parameters include:
-- 5 MFCC coefficients
+- 13 MFCC coefficients
 - 30 filterbank filters
 - 35ms window length
 - 10ms window step

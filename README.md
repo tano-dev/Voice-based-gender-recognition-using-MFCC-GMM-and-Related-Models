@@ -20,7 +20,7 @@ The project uses MFCC with delta and double-delta coefficients for robust voice 
 Configuration parameters include:
 - 5 MFCC coefficients
 - 30 filterbank filters
-- 50ms window length
+- 35ms window length
 - 10ms window step
 - Cepstral Mean Normalization (CMN) applied
 

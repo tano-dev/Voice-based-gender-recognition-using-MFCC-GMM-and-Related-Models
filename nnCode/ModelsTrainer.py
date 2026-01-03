@@ -2,8 +2,9 @@ import os
 import pickle
 import warnings
 import numpy as np
-import matplotlib.pyplot as plt # Import matplotlib
-from hmmlearn import hmm
+import matplotlib.pyplot as plt
+from sklearn.neural_network import MLPClassifier # <--- THƯ VIỆN ĐÚNG
+from sklearn.preprocessing import StandardScaler
 from nnCode.FeaturesExtractor import FeaturesExtractor 
 
 warnings.filterwarnings("ignore")
@@ -15,118 +16,96 @@ class ModelsTrainer:
         self.features_extractor    = FeaturesExtractor()
 
     def get_file_paths(self, females_training_path, males_training_path):
-        # Join paths safely for any OS
         females = [os.path.join(females_training_path, f) for f in os.listdir(females_training_path) if f.endswith('.wav')]
         males   = [os.path.join(males_training_path, f) for f in os.listdir(males_training_path) if f.endswith('.wav')]
         return females, males
 
-    def train_model_for_class(self, files, label_name):
+    def extract_stat_features(self, file_path):
         """
-        Extracts features from ALL files in a list and trains ONE GMM for that class.
-        Includes optimization (downsampling) to prevent 'running forever'.
+        Trích xuất đặc trưng thống kê (Mean & Std) để tạo input cố định cho MLP.
+        Output: Vector 1 chiều (ví dụ: 13 mean + 13 std = 26 chiều)
         """
-        all_features = np.asarray(())
-        
-        print(f"--> STARTING TRAINING FOR: {label_name}")
-        
-        count = 0
-        for file in files:
-            count += 1
-            if count % 10 == 0:
-                print(f"Processing {label_name} file {count}/{len(files)}")
+        try:
+            # Lấy toàn bộ frame MFCC: shape (T, n_mfcc)
+            vector = self.features_extractor.extract_features(file_path)
             
-            try:
-                vector = self.features_extractor.extract_features(file)
-                
-                # --- OPTIMIZATION START ---
-                # Take every 5th frame. Reduces data size by 80% but keeps the pattern.
-                # vector = vector[::5] 
-                # --- OPTIMIZATION END ---
-                
-                if all_features.size == 0:
-                    all_features = vector
-                else:
-                    all_features = np.vstack((all_features, vector))
-            except Exception as e:
-                print(f"Error processing {file}: {e}")
-                continue
-
-        print(f"Total features shape for {label_name}: {all_features.shape}")
-
-        if all_features.size > 0:
-            print(f"Fitting GMM for {label_name} (this may still take a moment)...")
-
+            # Tính Mean và Std dọc theo trục thời gian
+            mean_vec = np.mean(vector, axis=0)
+            std_vec  = np.std(vector, axis=0)
             
-            # FIXED: Added min_covar to prevent numerical instability
-            # FIXED: Increased n_iter to 50 or 100 for better convergence
-            model_gmm = hmm.GaussianHMM(
-                n_components=16, 
-                covariance_type='diag', 
-                n_iter=50,             # Increased from 20
-                min_covar=0.01,       # Prevents variance from hitting 0
-                verbose=True
-            )
-            
-            model_gmm.fit(all_features)
-            
-            return model_gmm, model_gmm.monitor_.history
-        else:
-            print(f"No features extracted for {label_name}!")
-            return None, []
-
-    def plot_training_history(self, female_hist, male_hist):
-        """
-        Plots the Log-Likelihood convergence for both models.
-        """
-        
-        plt.figure(figsize=(12, 5))
-
-        # Plot Female Data
-        plt.subplot(1, 2, 1)
-        if female_hist:
-            plt.plot(female_hist, label='Log-Likelihood', color='purple')
-            plt.title('Female Model Convergence')
-            plt.xlabel('Iterations')
-            plt.ylabel('Log-Likelihood')
-            plt.grid(True)
-            plt.legend()
-        else:
-            plt.text(0.5, 0.5, 'No Data', ha='center')
-
-        # Plot Male Data
-        plt.subplot(1, 2, 2)
-        if male_hist:
-            plt.plot(male_hist, label='Log-Likelihood', color='orange')
-            plt.title('Male Model Convergence')
-            plt.xlabel('Iterations')
-            plt.grid(True)
-            plt.legend()
-        else:
-            plt.text(0.5, 0.5, 'No Data', ha='center')
-
-        plt.tight_layout()
-        plt.show()
+            # Nối lại thành 1 vector duy nhất
+            stat_vector = np.concatenate((mean_vec, std_vec))
+            return stat_vector
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            return None
 
     def process(self):
         females, males = self.get_file_paths(self.females_training_path, self.males_training_path)
         
-        # 1. Train Female Model
-        female_gmm, female_hist = self.train_model_for_class(females, "female")
-        if female_gmm:
-            self.save_gmm(female_gmm, "females")
-            
-        # 2. Train Male Model
-        male_gmm, male_hist = self.train_model_for_class(males, "male")
-        if male_gmm:
-            self.save_gmm(male_gmm, "males")
-            
-        # 3. Show Graph
-        print("Displaying training graph...")
-        self.plot_training_history(female_hist, male_hist)
+        X_data = []
+        y_labels = [] # 0: Female, 1: Male
 
-    def save_gmm(self, gmm, name):
-        """ Save the actual GMM object """
-        # Create a 'models' directory if it doesn't exist to keep things clean
+        print("Extracting features for Neural Network...")
+        
+        # 1. Prepare Female Data
+        for f in females:
+            vec = self.extract_stat_features(f)
+            if vec is not None:
+                X_data.append(vec)
+                y_labels.append(0) # Label 0 cho Nữ
+
+        # 2. Prepare Male Data
+        for m in males:
+            vec = self.extract_stat_features(m)
+            if vec is not None:
+                X_data.append(vec)
+                y_labels.append(1) # Label 1 cho Nam
+
+        # Convert to numpy arrays
+        X_data = np.array(X_data)
+        y_labels = np.array(y_labels)
+
+        print(f"Data shape: {X_data.shape}, Labels shape: {y_labels.shape}")
+
+        # 3. Train MLP Classifier (Neural Network)
+        print("Training MLP Classifier...")
+        
+        # Cấu hình đúng như trong LaTeX mô tả
+        mlp = MLPClassifier(
+            hidden_layer_sizes=(256, 128), # 2 lớp ẩn
+            activation='relu',             # Hàm kích hoạt ReLU
+            solver='adam',                 # Tối ưu Adam
+            alpha=0.0001,
+            batch_size='auto',
+            learning_rate='constant',
+            learning_rate_init=0.001,
+            max_iter=500,                  # Số vòng lặp
+            random_state=42,
+            verbose=True                   # Hiện quá trình train
+        )
+
+        # Scale dữ liệu (Rất quan trọng với Neural Net)
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X_data)
+
+        # Huấn luyện
+        mlp.fit(X_scaled, y_labels)
+
+        # 4. Vẽ biểu đồ Loss curve
+        plt.figure(figsize=(8, 5))
+        plt.plot(mlp.loss_curve_, label='Loss')
+        plt.title('Neural Network Training Loss')
+        plt.xlabel('Iterations')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        # 5. Lưu mô hình (Lưu cả scaler để dùng lúc test)
+        self.save_model(mlp, scaler, "gender_mlp")
+
+    def save_model(self, model, scaler, name):
         base_path = os.path.dirname(os.path.abspath(__file__))
         models_path = os.path.join(base_path, "models")
         if not os.path.exists(models_path):
@@ -134,12 +113,14 @@ class ModelsTrainer:
             
         filename = os.path.join(models_path, name + ".nn")
         
-        with open(filename, 'wb') as gmm_file:
-            pickle.dump(gmm, gmm_file)
+        # Lưu thành dictionary chứa cả model và scaler
+        save_dict = {'model': model, 'scaler': scaler}
+        
+        with open(filename, 'wb') as f:
+            pickle.dump(save_dict, f)
         print(f"SAVED MODEL: {filename}")
 
 if __name__== "__main__":
-    # Ensure paths are correct relative to where you run the script
     if os.path.exists("TrainingData/females") and os.path.exists("TrainingData/males"):
         trainer = ModelsTrainer("TrainingData/females", "TrainingData/males")
         trainer.process()

@@ -24,11 +24,11 @@ class GenderIdentifier:
         self.false_negative_female = 0  
         self.false_negative_male = 0    
         
-        # --- NEW: Data storage for Plotting (Giống GMM) ---
-        # Lưu tuple (prob_female, prob_male) cho các mẫu thực tế là Nữ
-        self.score_history_female = [] 
-        # Lưu tuple (prob_female, prob_male) cho các mẫu thực tế là Nam
-        self.score_history_male = []
+        # --- NEW: Data storage for Decision Score Plot ---
+        self.decision_scores = [] # Lưu giá trị (P_male - P_female)
+        self.true_labels = []     # Lưu nhãn thực tế (-1: Nữ, 1: Nam)
+        
+        self.confidence_scores = []
         
         # 1. LOAD MODEL & SCALER
         print(f"Loading Neural Network model from: {model_path}...")
@@ -70,36 +70,39 @@ class GenderIdentifier:
                     vector_scaled = self.scaler.transform(vector)
                     
                     # 3. Dự đoán
-                    # predict_proba trả về [[prob_female, prob_male]] (vì label 0=Female, 1=Male)
                     probs = self.model.predict_proba(vector_scaled)[0]
                     prob_female = probs[0]
                     prob_male   = probs[1]
                     
-                    # Quyết định: Ai cao hơn người đó thắng
+                    # TÍNH DECISION SCORE: (P_Male - P_Female)
+                    # Kết quả từ -1 (Rất nữ) đến 1 (Rất nam), 0 là biên
+                    score = prob_male - prob_female
+                    
                     if prob_male > prob_female:
                         winner = "male"
                     else:
                         winner = "female"
                     
-                    # 4. Kiểm tra kết quả thực tế (Expectation)
+                    # 4. Kiểm tra kết quả thực tế
                     if "female" in file.lower():
                         expected_gender = "female"
-                        # Lưu điểm số vào lịch sử Nữ để vẽ đồ thị
-                        self.score_history_female.append((prob_female, prob_male))
+                        self.true_labels.append(-1) # Quy ước -1 là Nữ
+                        self.decision_scores.append(score)
                     elif "male" in file.lower():
                         expected_gender = "male"
-                        # Lưu điểm số vào lịch sử Nam để vẽ đồ thị
-                        self.score_history_male.append((prob_female, prob_male))
+                        self.true_labels.append(1)  # Quy ước 1 là Nam
+                        self.decision_scores.append(score)
                     else:
                         expected_gender = "unknown"
                     
                     # 5. Cập nhật Metrics
                     self.update_metrics(expected_gender, winner)
                     confidence = max(prob_female, prob_male)
+                    self.confidence_scores.append(confidence)
 
                     print("%10s %6s %1s" % ("+ EXPECTATION",":", expected_gender))
                     print("%10s %3s %1s" % ("+ IDENTIFICATION", ":", winner))
-                    print(f"   Probs -> Female: {prob_female:.4f} | Male: {prob_male:.4f}")
+                    print(f"   Score (M-F): {score:.4f} | Conf: {confidence*100:.1f}%")
 
                     if winner != expected_gender: 
                         self.error += 1
@@ -117,7 +120,7 @@ class GenderIdentifier:
             accuracy = (float(self.total_sample - self.error) / float(self.total_sample)) * 100
             print("*** Accuracy = " + str(round(accuracy, 3)) + "% ***")
             self.print_statistics()
-            self.process_plot() # <--- Gọi hàm vẽ đồ thị mới
+            self.process_plot()
 
     def update_metrics(self, expected, predicted):
         if expected == "female" and predicted == "female":
@@ -170,10 +173,10 @@ class GenderIdentifier:
         print("PERFORMANCE REPORT (NEURAL NETWORK)")
         print("="*70)
         print(f"Overall Accuracy: {metrics['accuracy']*100:.2f}%")
-        # (Giữ nguyên phần print cũ của bạn...)
+        # (Giữ nguyên phần print như cũ)
 
     def process_plot(self):
-        """Create comprehensive visualization similar to GMM style"""
+        """Create comprehensive visualization"""
         
         if self.total_sample == 0:
             return
@@ -242,30 +245,35 @@ class GenderIdentifier:
         for bar, v in zip(bars, [female_acc, male_acc]):
             ax4.text(bar.get_x() + bar.get_width()/2, v + 2, f'{v:.1f}%', ha='center', va='bottom', fontweight='bold')
         
-        # --- 5. Score Distribution (Scatter Plot - GIỐNG GMM) ---
-        ax5 = plt.subplot(2, 3, 5)
-        
-        # Chuyển list thành numpy array để vẽ
-        if self.score_history_female:
-            f_data = np.array(self.score_history_female) # Cột 0 là Prob_Fem, Cột 1 là Prob_Male
-            ax5.scatter(f_data[:, 0], f_data[:, 1], 
-                       alpha=0.6, label='Actual Female', color='#e91e63', s=40)
+        # --- 5. Decision Scores Scatter Plot (Yêu cầu mới) ---
+        if self.decision_scores and self.true_labels:
+            ax5 = plt.subplot(2, 3, 5)
             
-        if self.score_history_male:
-            m_data = np.array(self.score_history_male)
-            ax5.scatter(m_data[:, 0], m_data[:, 1], 
-                       alpha=0.6, label='Actual Male', color='#2196f3', s=40)
-        
-        # Vẽ đường phân cách (Decision Boundary)
-        # Với NN softmax, biên quyết định là đường y = x (hoặc Prob_Female = 0.5)
-        ax5.plot([0, 1], [0, 1], 'k--', alpha=0.5, label='Equal Probability')
-        
-        ax5.set_xlabel('Probability Female')
-        ax5.set_ylabel('Probability Male')
-        ax5.set_title('Probability Distribution\n(Separation of Classes)')
-        ax5.legend()
-        ax5.grid(True, alpha=0.3)
-        # Lưu ý: Vì Prob_Fem + Prob_Male = 1, các điểm sẽ nằm trên đường chéo y = 1-x.
+            decision_scores_array = np.array(self.decision_scores)
+            true_labels_array = np.array(self.true_labels)
+            
+            # Lấy index của mẫu Nữ và Nam
+            female_idx = true_labels_array == -1
+            male_idx = true_labels_array == 1
+            
+            # Vẽ điểm cho Nữ (Màu hồng)
+            ax5.scatter(np.where(female_idx)[0], decision_scores_array[female_idx],
+                        alpha=0.6, color='#e91e63', s=40, label='Actual Female', edgecolors='white', linewidth=0.5)
+            
+            # Vẽ điểm cho Nam (Màu xanh)
+            ax5.scatter(np.where(male_idx)[0], decision_scores_array[male_idx],
+                        alpha=0.6, color='#2196f3', s=40, label='Actual Male', edgecolors='white', linewidth=0.5)
+            
+            # Vẽ đường biên quyết định y = 0
+            ax5.axhline(y=0, color='red', linestyle='--', linewidth=1.5, label='Decision Boundary')
+            
+            # Chú thích
+            ax5.set_xlabel('Sample Index')
+            ax5.set_ylabel('Decision Score (Male - Female)')
+            ax5.set_title('Decision Scores by Sample')
+            ax5.legend(loc='lower right', fontsize='small')
+            ax5.grid(True, alpha=0.3)
+            # Giải thích: Điểm trên 0 dự đoán là Nam, dưới 0 là Nữ.
         
         # --- 6. Summary Statistics Text ---
         ax6 = plt.subplot(2, 3, 6)

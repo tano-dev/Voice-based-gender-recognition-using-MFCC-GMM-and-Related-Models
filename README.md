@@ -1,4 +1,4 @@
-# Voice-Based Gender Recognition using MFCC and GMM
+# Voice-based-gender-recognition-using-MFCC-GMM-and-Related-Models
 
 A machine learning project that identifies gender from voice recordings using Mel-Frequency Cepstral Coefficients (MFCC) and multiple classification algorithms.
 

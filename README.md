@@ -50,10 +50,8 @@ The dataset includes:
 
 ```
 .
-├── gmmCode/          # Gaussian Mixture Model implementation
-├── hmmCode/          # Hidden Markov Model implementation
-├── svmCode/          # Support Vector Machine implementation
-├── nnCode/           # Neural Network implementation
+├── Models/          # Models implementation
+├── Modules/          # Main modules for data processing
 ├── Notebook/         # Jupyter notebooks for each implementation
 ├── SLR45/            # Dataset directory
 ├── TrainingData/     # Generated training data folders

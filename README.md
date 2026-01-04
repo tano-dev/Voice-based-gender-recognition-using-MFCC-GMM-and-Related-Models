@@ -183,3 +183,4 @@ The system generates multiple visualizations:
 - Training progress is displayed with regular updates and final convergence plots
 - Models are saved as pickle files (`.gmm`, `.hmm`, `.svm`, `.nn`) for reuse
 - Extensive logging and print statements provide insights into the training and testing processes
+- This project was inspired heavily from [https://github.com/SuperKogito/Voice-based-gender-recognition](https://github.com/SuperKogito/Voice-based-gender-recognition)

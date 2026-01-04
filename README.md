@@ -86,7 +86,7 @@ pip install numpy scipy scikit-learn python-speech-features hmmlearn matplotlib
 
 3. Prepare the dataset:
 ```bash
-python -m gmmCode.DataManager
+python -m Modules.DataProcessor
 ```
 
 This will extract and organize the SLR45 dataset into training and testing folders.
@@ -99,22 +99,22 @@ Each implementation can be trained independently:
 
 **GMM (Recommended):**
 ```bash
-python -m gmmCode.ModelsTrainer
+python -m Models.GMM_implementation.GMM_Trainer
 ```
 
 **HMM:**
 ```bash
-python -m hmmCode.ModelsTrainer
+python -m Models.HMM_implementation.HMM_Trainer
 ```
 
 **SVM:**
 ```bash
-python -m svmCode.ModelsTrainer
+python -m Models.SVM_implementation.SVM_Trainer
 ```
 
 **NN:**
 ```bash
-python -m nnCode.ModelsTrainer
+python -m Models.NN_implementation.NN_Trainer
 ```
 
 Training will display convergence plots showing the log-likelihood improvement over iterations.
@@ -137,10 +137,10 @@ The system will process all test files and output:
 ### Using Jupyter Notebooks
 
 Interactive notebooks are available for each implementation:
-- `Notebook/gmmCode.ipynb`
-- `Notebook/hmmCode.ipynb`
-- `Notebook/svmCode.ipynb`
-- `Notebook/nnCode.ipynb`
+- `Notebook/gmm.ipynb`
+- `Notebook/hmm.ipynb`
+- `Notebook/svm.ipynb`
+- `Notebook/nn.ipynb`
 
 ## Model Details
 
